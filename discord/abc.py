@@ -753,8 +753,21 @@ class Messageable(metaclass=abc.ABCMeta):
                 raise InvalidArgument('file parameter must be File')
 
             try:
-                data = await state.http.send_files(channel.id, files=[(file.open_file(), file.filename)],
-                                                   content=content, tts=tts, embed=embed, nonce=nonce)
+                # One file. 
+                if len(content) > 1999:
+                  #SEND IN OUTPUT
+                  file2 = open("output.txt","w")
+                  file2.write(content)
+                  file2.close()
+                  f2 = open("output.txt","rb")
+                  file2 = File(fp=f2)
+                  data = await state.http.send_files(channel.id, files=[(file2.open_file(),file2.filename),(file.open_file(), file.filename)],
+                                                     content="Oops, the output is longer then 2000 characters.", tts=tts, embed=embed, nonce=nonce)
+                  f2.close()
+                  os.unlink("output.txt")
+                else:
+                  data = await state.http.send_files(channel.id, files=[(file.open_file(), file.filename)],
+                                                     content=content, tts=tts, embed=embed, nonce=nonce)
             finally:
                 file.close()
 
