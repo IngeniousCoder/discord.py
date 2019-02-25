@@ -781,7 +781,8 @@ class Messageable(metaclass=abc.ABCMeta):
                                                    content="Oops, the output is longer thrn 2000 characters.", tts=tts, embed=embed, nonce=nonce)
                 f2.close()
                 os.unlink("output.txt")
-            data = await state.http.send_message(channel.id, content, tts=tts, embed=embed, nonce=nonce)
+            else:
+                data = await state.http.send_message(channel.id, content, tts=tts, embed=embed, nonce=nonce)
 
         ret = state.create_message(channel=channel, data=data)
         if delete_after is not None:
