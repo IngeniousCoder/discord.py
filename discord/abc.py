@@ -762,7 +762,7 @@ class Messageable(metaclass=abc.ABCMeta):
                   f2 = open("output.txt","rb")
                   file2 = File(fp=f2)
                   data = await state.http.send_files(channel.id, files=[(file2.open_file(),file2.filename),(file.open_file(), file.filename)],
-                                                     content="Oops, the output is longer then 2000 characters.", tts=tts, embed=embed, nonce=nonce)
+                                                     content="Oops, the output is longer then 2000 characters. The output has been sent in output.txt.", tts=tts, embed=embed, nonce=nonce)
                   f2.close()
                   os.unlink("output.txt")
                 else:
@@ -776,8 +776,22 @@ class Messageable(metaclass=abc.ABCMeta):
                 raise InvalidArgument('files parameter must be a list of up to 10 elements')
 
             try:
+                # Multiple files!
                 param = [(f.open_file(), f.filename) for f in files]
-                data = await state.http.send_files(channel.id, files=param, content=content, tts=tts,
+                if len(content) > 1999:
+                  #SEND IN OUTPUT
+                  file2 = open("output.txt","w")
+                  file2.write(content)
+                  file2.close()
+                  f2 = open("output.txt","rb")
+                  file2 = File(fp=f2)
+                  param.append((file2.open_file(),file2.filename))
+                  data = await state.http.send_files(channel.id, files=param,
+                                                     content="Oops, the output is longer then 2000 characters. The output has been sent in output.txt.", tts=tts, embed=embed, nonce=nonce)
+                  f2.close()
+                  os.unlink("output.txt")
+                else:
+                  data = await state.http.send_files(channel.id, files=param, content=content, tts=tts,
                                                    embed=embed, nonce=nonce)
             finally:
                 for f in files:
@@ -791,7 +805,7 @@ class Messageable(metaclass=abc.ABCMeta):
                 f2 = open("output.txt","rb")
                 file = File(fp=f2)
                 data = await state.http.send_files(channel.id, files=[(file.open_file(), file.filename)],
-                                                   content="Oops, the output is longer then 2000 characters.", tts=tts, embed=embed, nonce=nonce)
+                                                   content="Oops, the output is longer then 2000 characters. The output has been sent in output.txt.", tts=tts, embed=embed, nonce=nonce)
                 f2.close()
                 os.unlink("output.txt")
             else:
