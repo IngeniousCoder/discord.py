@@ -772,8 +772,8 @@ class Messageable(metaclass=abc.ABCMeta):
                 file.close()
 
         elif files is not None:
-            if len(files) > 10:
-                raise InvalidArgument('files parameter must be a list of up to 10 elements')
+            if len(files) > 9:
+                raise InvalidArgument('files parameter must be a list of up to 9 elements')
 
             try:
                 # Multiple files!
