@@ -741,7 +741,10 @@ class Messageable(metaclass=abc.ABCMeta):
 
         channel = await self._get_channel()
         state = self._state
-        content = str(content.replace('@everyone', '@\u200beveryone').replace("@here","@\u200bhere")) if content is not None else ""
+        if mention:
+            content = content if content is not None else ""
+        else:
+       v    content = str(content.replace('@everyone', '@\u200beveryone').replace("@here","@\u200bhere")) if content is not None else ""
         if embed is not None:
             embed = embed.to_dict()
 
