@@ -744,7 +744,7 @@ class Messageable(metaclass=abc.ABCMeta):
         if mention:
             content = content if content is not None else ""
         else:
-       v    content = str(content.replace('@everyone', '@\u200beveryone').replace("@here","@\u200bhere")) if content is not None else ""
+            content = str(content.replace('@everyone', '@\u200beveryone').replace("@here","@\u200bhere")) if content is not None else ""
         if embed is not None:
             embed = embed.to_dict()
 
