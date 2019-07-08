@@ -850,7 +850,7 @@ class Messageable(metaclass=abc.ABCMeta):
                 file.close()
                 f2 = open("output.txt","rb")
                 file = File(fp=f2)
-                data = await state.http.send_files(channel.id, files=[(file.open_file(), file.filename)],
+                data = await state.http.send_files(channel.id, files=[file],
                                                    content="Oops, the output is longer then 2000 characters. The output has been sent in output.txt.", tts=tts, embed=embed, nonce=nonce)
                 f2.close()
                 os.unlink("output.txt")
