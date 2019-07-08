@@ -811,7 +811,6 @@ class Messageable(metaclass=abc.ABCMeta):
                   data = await state.http.send_files(channel.id, files=[file,file2],
                                                      content="Oops, the output is longer then 2000 characters. The output has been sent in output.txt.", tts=tts, embed=embed, nonce=nonce)
                   f2.close()
-                  os.unlink("output.txt")
                 else:
                   data = await state.http.send_files(channel.id, files=[file],
                                                      content=content, tts=tts, embed=embed, nonce=nonce)
@@ -836,7 +835,6 @@ class Messageable(metaclass=abc.ABCMeta):
                   data = await state.http.send_files(channel.id, files=param,
                                                      content="Oops, the output is longer then 2000 characters. The output has been sent in output.txt.", tts=tts, embed=embed, nonce=nonce)
                   f2.close()
-                  os.unlink("output.txt")
                 else:
                   data = await state.http.send_files(channel.id, files=param, content=content, tts=tts,
                                                    embed=embed, nonce=nonce)
@@ -854,7 +852,6 @@ class Messageable(metaclass=abc.ABCMeta):
                 data = await state.http.send_files(channel.id, files=[file],
                                                    content="Oops, the output is longer then 2000 characters. The output has been sent in output.txt.", tts=tts, embed=embed, nonce=nonce)
                 f2.close()
-                os.unlink("output.txt")
             else:
                 data = await state.http.send_message(channel.id, content, tts=tts, embed=embed, nonce=nonce)
 
