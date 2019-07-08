@@ -54,7 +54,7 @@ class Reaction:
 
     Attributes
     -----------
-    emoji: :class:`Emoji` or :class:`str`
+    emoji: Union[:class:`Emoji`, :class:`str`]
         The reaction emoji. May be a custom emoji, or a unicode emoji.
     count: :class:`int`
         Number of times this reaction was made
@@ -99,7 +99,7 @@ class Reaction:
         Remove the reaction by the provided :class:`User` from the message.
 
         If the reaction is not your own (i.e. ``user`` parameter is not you) then
-        the :attr:`discord.permissions.Permissions.manage_messages` permission is needed.
+        the :attr:`~Permissions.manage_messages` permission is needed.
 
         The ``user`` parameter must represent a user or member and meet
         the :class:`abc.Snowflake` abc.
@@ -127,20 +127,6 @@ class Reaction:
         The ``after`` parameter must represent a member
         and meet the :class:`abc.Snowflake` abc.
 
-        Parameters
-        ------------
-        limit: int
-            The maximum number of results to return.
-            If not provided, returns all the users who
-            reacted to the message.
-        after: :class:`abc.Snowflake`
-            For pagination, reactions are sorted by member.
-
-        Raises
-        --------
-        HTTPException
-            Getting the users for the reaction failed.
-
         Examples
         ---------
 
@@ -153,9 +139,23 @@ class Reaction:
         Flattening into a list: ::
 
             users = await reaction.users().flatten()
-            # users is now a list...
+            # users is now a list of User...
             winner = random.choice(users)
             await channel.send('{} has won the raffle.'.format(winner))
+
+        Parameters
+        ------------
+        limit: :class:`int`
+            The maximum number of results to return.
+            If not provided, returns all the users who
+            reacted to the message.
+        after: :class:`abc.Snowflake`
+            For pagination, reactions are sorted by member.
+
+        Raises
+        --------
+        HTTPException
+            Getting the users for the reaction failed.
 
         Yields
         --------

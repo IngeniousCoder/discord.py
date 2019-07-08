@@ -84,7 +84,7 @@ class VoiceClient:
         The endpoint we are connecting to.
     channel: :class:`abc.Connectable`
         The voice channel connected to.
-    loop
+    loop: :class:`asyncio.AbstractEventLoop`
         The event loop that the voice client is running on.
     """
     def __init__(self, state, timeout, channel):
@@ -100,6 +100,9 @@ class VoiceClient:
         self._state = state
         # this will be used in the AudioPlayer thread
         self._connected = threading.Event()
+
+        self._handshaking = False
+        self._handshake_check = asyncio.Lock(loop=self.loop)
         self._handshake_complete = asyncio.Event(loop=self.loop)
 
         self.mode = None
@@ -166,6 +169,12 @@ class VoiceClient:
             self._state._remove_voice_client(key_id)
 
     async def _create_socket(self, server_id, data):
+        async with self._handshake_check:
+            if self._handshaking:
+                log.info("Ignoring voice server update while handshake is in progress")
+                return
+            self._handshaking = True
+
         self._connected.clear()
         self.session_id = self.main_ws.session_id
         self.server_id = server_id
@@ -209,6 +218,7 @@ class VoiceClient:
 
         try:
             self.ws = await DiscordVoiceWebSocket.from_client(self)
+            self._handshaking = False
             self._connected.clear()
             while not hasattr(self, 'secret_key'):
                 await self.ws.poll_event()
@@ -232,7 +242,12 @@ class VoiceClient:
                 await self.ws.poll_event()
             except (ConnectionClosed, asyncio.TimeoutError) as exc:
                 if isinstance(exc, ConnectionClosed):
-                    if exc.code == 1000:
+                    # The following close codes are undocumented so I will document them here.
+                    # 1000 - normal closure (obviously)
+                    # 4014 - voice channel has been deleted.
+                    # 4015 - voice server has crashed
+                    if exc.code in (1000, 4014, 4015):
+                        log.info('Disconnecting from voice normally, close code %d.', exc.code)
                         await self.disconnect()
                         break
 
@@ -257,7 +272,7 @@ class VoiceClient:
 
         Disconnects this voice client from voice.
         """
-        if not force and not self._connected.is_set():
+        if not force and not self.is_connected():
             return
 
         self.stop()
@@ -286,7 +301,7 @@ class VoiceClient:
         await self.main_ws.voice_state(guild_id, channel.id)
 
     def is_connected(self):
-        """:class:`bool`: Indicates if the voice client is connected to voice."""
+        """Indicates if the voice client is connected to voice."""
         return self._connected.is_set()
 
     # audio related
@@ -330,7 +345,7 @@ class VoiceClient:
         -----------
         source: :class:`AudioSource`
             The audio source we're reading from.
-        after
+        after: Callable[[:class:`Exception`], Any]
             The finalizer that is called after the stream is exhausted.
             All exceptions it throws are silently discarded. This function
             must have a single parameter, ``error``, that denotes an
@@ -344,7 +359,7 @@ class VoiceClient:
             source is not a :class:`AudioSource` or after is not a callable.
         """
 
-        if not self._connected:
+        if not self.is_connected():
             raise ClientException('Not connected to voice.')
 
         if self.is_playing():
@@ -405,16 +420,16 @@ class VoiceClient:
 
         Parameters
         ----------
-        data: bytes
+        data: :class:`bytes`
             The :term:`py:bytes-like object` denoting PCM or Opus voice data.
-        encode: bool
+        encode: :class:`bool`
             Indicates if ``data`` should be encoded into Opus.
 
         Raises
         -------
         ClientException
             You are not connected.
-        OpusError
+        opus.OpusError
             Encoding the data failed.
         """
 

@@ -44,8 +44,13 @@ from .errors import ConnectionClosed, InvalidArgument
 
 log = logging.getLogger(__name__)
 
-__all__ = ['DiscordWebSocket', 'KeepAliveHandler', 'VoiceKeepAliveHandler',
-           'DiscordVoiceWebSocket', 'ResumeWebSocket']
+__all__ = (
+    'DiscordWebSocket',
+    'KeepAliveHandler',
+    'VoiceKeepAliveHandler',
+    'DiscordVoiceWebSocket',
+    'ResumeWebSocket',
+)
 
 class ResumeWebSocket(Exception):
     """Signals to initialise via RESUME opcode instead of IDENTIFY."""
@@ -222,6 +227,7 @@ class DiscordWebSocket(websockets.client.WebSocketClientProtocol):
         # dynamically add attributes needed
         ws.token = client.http.token
         ws._connection = client._connection
+        ws._discord_parsers = client._connection.parsers
         ws._dispatch = client.dispatch
         ws.gateway = gateway
         ws.shard_id = shard_id
@@ -256,14 +262,14 @@ class DiscordWebSocket(websockets.client.WebSocketClientProtocol):
 
         Parameters
         -----------
-        event : str
+        event: :class:`str`
             The event name in all upper case to wait for.
         predicate
             A function that takes a data parameter to check for event
             properties. The data parameter is the 'd' key in the JSON message.
         result
             A function that takes the same data parameter and executes to send
-            the result to the future. If None, returns the data.
+            the result to the future. If ``None``, returns the data.
 
         Returns
         --------
@@ -409,11 +415,9 @@ class DiscordWebSocket(websockets.client.WebSocketClientProtocol):
             log.info('Shard ID %s has successfully RESUMED session %s under trace %s.',
                      self.shard_id, self.session_id, ', '.join(trace))
 
-        parser = 'parse_' + event.lower()
-
         try:
-            func = getattr(self._connection, parser)
-        except AttributeError:
+            func = self._discord_parsers[event]
+        except KeyError:
             log.warning('Unknown event %s.', event)
         else:
             func(data)
@@ -445,7 +449,7 @@ class DiscordWebSocket(websockets.client.WebSocketClientProtocol):
 
     @property
     def latency(self):
-        """:obj:`float`: Measures latency between a HEARTBEAT and a HEARTBEAT_ACK in seconds."""
+        """:class:`float`: Measures latency between a HEARTBEAT and a HEARTBEAT_ACK in seconds."""
         heartbeat = self._keep_alive
         return float('inf') if heartbeat is None else heartbeat.latency
 

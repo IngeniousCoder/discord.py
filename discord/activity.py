@@ -30,7 +30,12 @@ from .enums import ActivityType, try_enum
 from .colour import Colour
 from .utils import _get_as_snowflake
 
-__all__ = ['Activity', 'Streaming', 'Game', 'Spotify']
+__all__ = (
+    'Activity',
+    'Streaming',
+    'Game',
+    'Spotify',
+)
 
 """If curious, this is the current schema for an activity.
 
@@ -146,6 +151,18 @@ class Activity(_ActivityTag):
         self.sync_id = kwargs.pop('sync_id', None)
         self.session_id = kwargs.pop('session_id', None)
         self.type = try_enum(ActivityType, kwargs.pop('type', -1))
+
+    def __repr__(self):
+        attrs = (
+            'type',
+            'name',
+            'url',
+            'details',
+            'application_id',
+            'session_id',
+        )
+        mapped = ' '.join('%s=%r' % (attr, getattr(self, attr)) for attr in attrs)
+        return '<Activity %s>' % mapped
 
     def to_dict(self):
         ret = {}
@@ -492,7 +509,8 @@ class Spotify:
         return 'Spotify'
 
     def __eq__(self, other):
-        return isinstance(other, Spotify) and other._session_id == self._session_id
+        return (isinstance(other, Spotify) and other._session_id == self._session_id
+                and other._sync_id == self._sync_id and other.start == self.start)
 
     def __ne__(self, other):
         return not self.__eq__(other)
