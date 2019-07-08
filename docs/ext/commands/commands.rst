@@ -129,7 +129,7 @@ at all:
 
 .. image:: /images/commands/variable3.png
 
-Since the ``args`` variable is a `tuple <https://docs.python.org/3/library/stdtypes.html#sequence-types-list-tuple-range>`_,
+Since the ``args`` variable is a :class:`py:tuple`,
 you can do anything you would usually do with one.
 
 Keyword-Only Arguments
@@ -357,7 +357,7 @@ Discord Converters
 Working with :ref:`discord_api_models` is a fairly common thing when defining commands, as a result the library makes
 working with them easy.
 
-For example, to receive a :class:`Member`, you can just pass it as a converter:
+For example, to receive a :class:`Member` you can just pass it as a converter:
 
 .. code-block:: python3
 
@@ -377,6 +377,7 @@ A lot of discord models work out of the gate as a parameter:
 - :class:`VoiceChannel`
 - :class:`CategoryChannel`
 - :class:`Role`
+- :class:`Message` (since v1.1)
 - :class:`Invite`
 - :class:`Game`
 - :class:`Emoji`
@@ -393,6 +394,8 @@ converter is given below:
 |     Discord Class     |                    Converter                    |
 +-----------------------+-------------------------------------------------+
 | :class:`Member`       | :class:`~ext.commands.MemberConverter`          |
++-----------------------+-------------------------------------------------+
+| :class:`Message`      | :class:`~ext.commands.MessageConverter`         |
 +-----------------------+-------------------------------------------------+
 | :class:`User`         | :class:`~ext.commands.UserConverter`            |
 +-----------------------+-------------------------------------------------+
@@ -422,7 +425,7 @@ By providing the converter it allows us to use them as building blocks for anoth
     class MemberRoles(commands.MemberConverter):
         async def convert(self, ctx, argument):
             member = await super().convert(ctx, argument)
-            return member.roles
+            return [role.name for role in member.roles[1:]] # Remove everyone role!
 
     @bot.command()
     async def roles(ctx, *, member: MemberRoles):
@@ -651,6 +654,7 @@ When multiple checks are specified, **all** of them must be ``True``:
         return commands.check(predicate)
 
     @bot.command()
+    @commands.is_owner()
     @is_in_guild(41771983423143937)
     async def secretguilddata(ctx):
         """super secret stuff"""
@@ -665,6 +669,7 @@ raise a custom :exc:`~ext.commands.CommandError` derived exception, then it will
 .. code-block:: python3
 
     @bot.command()
+    @commands.is_owner()
     @is_in_guild(41771983423143937)
     async def secretguilddata(ctx):
         """super secret stuff"""

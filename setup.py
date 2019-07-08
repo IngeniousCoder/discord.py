@@ -1,4 +1,4 @@
-from setuptools import setup, find_packages
+from setuptools import setup
 import re
 
 requirements = []
@@ -34,10 +34,10 @@ with open('README.rst') as f:
     readme = f.read()
 
 extras_require = {
-    'voice': ['PyNaCl==1.2.1'],
+    'voice': ['PyNaCl==1.3.0'],
     'docs': [
-        'sphinx==1.7.4',
-        'sphinxcontrib-asyncio',
+        'sphinx==1.8.5',
+        'sphinxcontrib_trio==1.1.0',
         'sphinxcontrib-websupport',
     ]
 }
@@ -45,8 +45,12 @@ extras_require = {
 setup(name='discord.py',
       author='Rapptz',
       url='https://github.com/Rapptz/discord.py',
+      project_urls={
+        "Documentation": "https://discordpy.readthedocs.io/en/latest/",
+        "Issue tracker": "https://github.com/Rapptz/discord.py/issues",
+      },
       version=version,
-      packages=['discord', 'discord.ext.commands'],
+      packages=['discord', 'discord.ext.commands', 'discord.ext.tasks'],
       license='MIT',
       description='A python wrapper for the Discord API',
       long_description=readme,
@@ -56,7 +60,7 @@ setup(name='discord.py',
       extras_require=extras_require,
       python_requires='>=3.5.3',
       classifiers=[
-        'Development Status :: 4 - Beta',
+        'Development Status :: 5 - Production/Stable',
         'License :: OSI Approved :: MIT License',
         'Intended Audience :: Developers',
         'Natural Language :: English',
