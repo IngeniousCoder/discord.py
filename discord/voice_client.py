@@ -68,11 +68,10 @@ class VoiceClient:
 
     Warning
     --------
-    In order to play audio, you must have loaded the opus library
-    through :func:`opus.load_opus`.
-
-    If you don't do this then the library will not be able to
-    transmit audio.
+    In order to use PCM based AudioSources, you must have the opus library
+    installed on your system and loaded through :func:`opus.load_opus`.
+    Otherwise, your AudioSources must be opus encoded (e.g. using :class:`FFmpegOpusAudio`)
+    or the library will not be able to transmit audio.
 
     Attributes
     -----------
@@ -102,8 +101,8 @@ class VoiceClient:
         self._connected = threading.Event()
 
         self._handshaking = False
-        self._handshake_check = asyncio.Lock(loop=self.loop)
-        self._handshake_complete = asyncio.Event(loop=self.loop)
+        self._handshake_check = asyncio.Lock()
+        self._handshake_complete = asyncio.Event()
 
         self.mode = None
         self._connections = 0
@@ -111,7 +110,7 @@ class VoiceClient:
         self.timestamp = 0
         self._runner = None
         self._player = None
-        self.encoder = opus.Encoder()
+        self.encoder = None
 
     warn_nacl = not has_nacl
     supported_modes = (
@@ -150,7 +149,7 @@ class VoiceClient:
         await ws.voice_state(guild_id, channel_id)
 
         try:
-            await asyncio.wait_for(self._handshake_complete.wait(), timeout=self.timeout, loop=self.loop)
+            await asyncio.wait_for(self._handshake_complete.wait(), timeout=self.timeout)
         except asyncio.TimeoutError:
             await self.terminate_handshake(remove=True)
             raise
@@ -226,7 +225,7 @@ class VoiceClient:
         except (ConnectionClosed, asyncio.TimeoutError):
             if reconnect and _tries < 5:
                 log.exception('Failed to connect to voice... Retrying...')
-                await asyncio.sleep(1 + _tries * 2.0, loop=self.loop)
+                await asyncio.sleep(1 + _tries * 2.0)
                 await self.terminate_handshake()
                 await self.connect(reconnect=reconnect, _tries=_tries + 1)
             else:
@@ -258,7 +257,7 @@ class VoiceClient:
                 retry = backoff.delay()
                 log.exception('Disconnected from voice... Reconnecting in %.2fs.', retry)
                 self._connected.clear()
-                await asyncio.sleep(retry, loop=self.loop)
+                await asyncio.sleep(retry)
                 await self.terminate_handshake()
                 try:
                     await self.connect(reconnect=True)
@@ -356,7 +355,9 @@ class VoiceClient:
         ClientException
             Already playing audio or not connected.
         TypeError
-            source is not a :class:`AudioSource` or after is not a callable.
+            Source is not a :class:`AudioSource` or after is not a callable.
+        OpusNotLoaded
+            Source is not opus encoded and opus is not loaded.
         """
 
         if not self.is_connected():
@@ -367,6 +368,9 @@ class VoiceClient:
 
         if not isinstance(source, AudioSource):
             raise TypeError('source must an AudioSource not {0.__class__.__name__}'.format(source))
+
+        if not self.encoder and not source.is_opus():
+            self.encoder = opus.Encoder()
 
         self._player = AudioPlayer(source, self, after=after)
         self._player.start()
@@ -444,4 +448,4 @@ class VoiceClient:
         except BlockingIOError:
             log.warning('A packet has been dropped (seq: %s, timestamp: %s)', self.sequence, self.timestamp)
 
-        self.checked_add('timestamp', self.encoder.SAMPLES_PER_FRAME, 4294967295)
+        self.checked_add('timestamp', opus.Encoder.SAMPLES_PER_FRAME, 4294967295)

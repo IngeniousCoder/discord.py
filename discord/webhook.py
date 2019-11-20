@@ -201,7 +201,7 @@ class AsyncWebhookAdapter(WebhookAdapter):
                 remaining = r.headers.get('X-Ratelimit-Remaining')
                 if remaining == '0' and r.status != 429:
                     delta = utils._parse_ratelimit_header(r)
-                    await asyncio.sleep(delta, loop=self.loop)
+                    await asyncio.sleep(delta)
 
                 if 300 > r.status >= 200:
                     return response
@@ -209,11 +209,11 @@ class AsyncWebhookAdapter(WebhookAdapter):
                 # we are being rate limited
                 if r.status == 429:
                     retry_after = response['retry_after'] / 1000.0
-                    await asyncio.sleep(retry_after, loop=self.loop)
+                    await asyncio.sleep(retry_after)
                     continue
 
                 if r.status in (500, 502):
-                    await asyncio.sleep(1 + tries * 2, loop=self.loop)
+                    await asyncio.sleep(1 + tries * 2)
                     continue
 
                 if r.status == 403:
@@ -222,6 +222,8 @@ class AsyncWebhookAdapter(WebhookAdapter):
                     raise NotFound(r, response)
                 else:
                     raise HTTPException(r, response)
+        # no more retries
+        raise HTTPException(r, response)
 
     async def handle_execution_response(self, response, *, wait):
         data = await response
@@ -308,6 +310,8 @@ class RequestsWebhookAdapter(WebhookAdapter):
                 raise NotFound(r, response)
             else:
                 raise HTTPException(r, response)
+        # no more retries
+        raise HTTPException(r, response)
 
     def handle_execution_response(self, response, *, wait):
         if not wait:
@@ -397,8 +401,9 @@ class Webhook:
     ------------
     id: :class:`int`
         The webhook's ID
-    token: :class:`str`
-        The authentication token of the webhook.
+    token: Optional[:class:`str`]
+        The authentication token of the webhook. If this is ``None``
+        then the webhook cannot be used to make requests.
     guild_id: Optional[:class:`int`]
         The guild ID this webhook is for.
     channel_id: Optional[:class:`int`]
@@ -421,7 +426,7 @@ class Webhook:
         self.guild_id = utils._get_as_snowflake(data, 'guild_id')
         self.name = data.get('name')
         self.avatar = data.get('avatar')
-        self.token = data['token']
+        self.token = data.get('token')
         self._state = state or _PartialWebhookState(adapter)
         self._adapter = adapter
         self._adapter._prepare(self)
@@ -495,6 +500,25 @@ class Webhook:
         return cls(m.groupdict(), adapter=adapter)
 
     @classmethod
+    def _as_follower(cls, data, *, channel, user):
+        name = "{} #{}".format(channel.guild, channel)
+        feed = {
+            'id': data['webhook_id'],
+            'name': name,
+            'channel_id': channel.id,
+            'guild_id': channel.guild.id,
+            'user': {
+                'username': user.name,
+                'discriminator': user.discriminator,
+                'id': user.id,
+                'avatar': user.avatar
+            }
+        }
+
+        session = channel._state.http._HTTPClient__session
+        return cls(feed, adapter=AsyncWebhookAdapter(session=session))
+
+    @classmethod
     def from_state(cls, data, state):
         session = state.http._HTTPClient__session
         return cls(data, adapter=AsyncWebhookAdapter(session=session), state=state)
@@ -562,7 +586,7 @@ class Webhook:
         """
         if self.avatar is None:
             # Default is always blurple apparently
-            return Asset(self._state, 'https://cdn.discordapp.com/embed/avatars/0.png')
+            return Asset(self._state, '/embed/avatars/0.png')
 
         if not utils.valid_icon_size(size):
             raise InvalidArgument("size must be a power of 2 between 16 and 1024")
@@ -572,7 +596,7 @@ class Webhook:
         if format not in ('png', 'jpg', 'jpeg'):
             raise InvalidArgument("format must be one of 'png', 'jpg', or 'jpeg'.")
 
-        url = 'https://cdn.discordapp.com/avatars/{0.id}/{0.avatar}.{1}?size={2}'.format(self, format, size)
+        url = '/avatars/{0.id}/{0.avatar}.{1}?size={2}'.format(self, format, size)
         return Asset(self._state, url)
 
     def delete(self):
@@ -591,7 +615,12 @@ class Webhook:
             This webhook does not exist.
         Forbidden
             You do not have permissions to delete this webhook.
+        InvalidArgument
+            This webhook does not have a token associated with it.
         """
+        if self.token is None:
+            raise InvalidArgument('This webhook does not have a token associated with it')
+
         return self._adapter.delete_webhook()
 
     def edit(self, **kwargs):
@@ -615,9 +644,12 @@ class Webhook:
             Editing the webhook failed.
         NotFound
             This webhook does not exist.
-        Forbidden
-            You do not have permissions to edit this webhook.
+        InvalidArgument
+            This webhook does not have a token associated with it.
         """
+        if self.token is None:
+            raise InvalidArgument('This webhook does not have a token associated with it')
+
         payload = {}
 
         try:
@@ -698,7 +730,8 @@ class Webhook:
             The authorization token for the webhook is incorrect.
         InvalidArgument
             You specified both ``embed`` and ``embeds`` or the length of
-            ``embeds`` was invalid.
+            ``embeds`` was invalid or there was no token associated with
+            this webhook.
 
         Returns
         ---------
@@ -707,7 +740,8 @@ class Webhook:
         """
 
         payload = {}
-
+        if self.token is None:
+            raise InvalidArgument('This webhook does not have a token associated with it')
         if files is not None and file is not None:
             raise InvalidArgument('Cannot mix file and files keyword arguments.')
         if embeds is not None and embed is not None:

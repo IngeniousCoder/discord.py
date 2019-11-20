@@ -302,10 +302,15 @@ def _bytes_to_base64_data(data):
 def to_json(obj):
     return json.dumps(obj, separators=(',', ':'), ensure_ascii=True)
 
-def _parse_ratelimit_header(request):
-    now = parsedate_to_datetime(request.headers['Date'])
-    reset = datetime.datetime.fromtimestamp(int(request.headers['X-Ratelimit-Reset']), datetime.timezone.utc)
-    return (reset - now).total_seconds()
+def _parse_ratelimit_header(request, *, use_clock=False):
+    reset_after = request.headers.get('X-Ratelimit-Reset-After')
+    if use_clock or not reset_after:
+        utc = datetime.timezone.utc
+        now = datetime.datetime.now(utc)
+        reset = datetime.datetime.fromtimestamp(float(request.headers['X-Ratelimit-Reset']), utc)
+        return (reset - now).total_seconds()
+    else:
+        return float(reset_after)
 
 async def maybe_coroutine(f, *args, **kwargs):
     value = f(*args, **kwargs)
@@ -322,11 +327,16 @@ async def async_all(gen, *, check=_isawaitable):
             return False
     return True
 
-async def sane_wait_for(futures, *, timeout, loop):
-    _, pending = await asyncio.wait(futures, timeout=timeout, loop=loop)
+async def sane_wait_for(futures, *, timeout):
+    ensured = [
+        asyncio.ensure_future(fut) for fut in futures
+    ]
+    done, pending = await asyncio.wait(ensured, timeout=timeout, return_when=asyncio.ALL_COMPLETED)
 
     if len(pending) != 0:
         raise asyncio.TimeoutError()
+
+    return done
 
 def valid_icon_size(size):
     """Icons must be power of 2 within [16, 4096]."""
@@ -431,7 +441,7 @@ def escape_markdown(text, *, as_needed=False, ignore_links=True):
     """
 
     if not as_needed:
-        url_regex = r'(?P<url>(?:https?|steam)://(?:-\.)?(?:[^\s/?\.#-]+\.?)+(?:/[^\s]*)?)'
+        url_regex = r'(?P<url><[^: >]+:\/[^ >]+>|(?:https?|steam):\/\/[^\s<]+[^<.,:;\"\'\]\s])'
         def replacement(match):
             groupdict = match.groupdict()
             is_url = groupdict.get('url')
@@ -439,7 +449,7 @@ def escape_markdown(text, *, as_needed=False, ignore_links=True):
                 return is_url
             return '\\' + groupdict['markdown']
 
-        regex = r'(?P<markdown>[_\\~|\*`])'
+        regex = r'(?P<markdown>[_\\~|\*`]|>(?:>>)?\s)'
         if ignore_links:
             regex = '(?:%s|%s)' % (url_regex, regex)
         return re.sub(regex, replacement, text)

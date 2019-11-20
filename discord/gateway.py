@@ -297,6 +297,7 @@ class DiscordWebSocket(websockets.client.WebSocketClientProtocol):
                 },
                 'compress': True,
                 'large_threshold': 250,
+                'guild_subscriptions': self._connection.guild_subscriptions,
                 'v': 3
             }
         }
@@ -388,7 +389,7 @@ class DiscordWebSocket(websockets.client.WebSocketClientProtocol):
 
             if op == self.INVALIDATE_SESSION:
                 if data is True:
-                    await asyncio.sleep(5.0, loop=self.loop)
+                    await asyncio.sleep(5.0)
                     await self.close()
                     raise ResumeWebSocket(self.shard_id)
 
@@ -513,6 +514,17 @@ class DiscordWebSocket(websockets.client.WebSocketClientProtocol):
         payload = {
             'op': self.GUILD_SYNC,
             'd': list(guild_ids)
+        }
+        await self.send_as_json(payload)
+
+    async def request_chunks(self, guild_id, query, limit):
+        payload = {
+            'op': self.REQUEST_MEMBERS,
+            'd': {
+                'guild_id': str(guild_id),
+                'query': query,
+                'limit': limit
+            }
         }
         await self.send_as_json(payload)
 
@@ -696,6 +708,7 @@ class DiscordVoiceWebSocket(websockets.client.WebSocketClientProtocol):
         state = self._connection
         state.ssrc = data['ssrc']
         state.voice_port = data['port']
+        state.endpoint_ip = data['ip']
 
         packet = bytearray(70)
         struct.pack_into('>I', packet, 0, state.ssrc)

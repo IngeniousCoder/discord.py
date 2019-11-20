@@ -241,10 +241,11 @@ class Guild(Hashable):
         - ``MORE_EMOJI``: Guild is allowed to have more than 50 custom emoji.
         - ``DISCOVERABLE``: Guild shows up in Server Discovery.
         - ``COMMERCE``: Guild can sell things using store channels.
-        - ``LURKABLE``: Users can lurk in this guild via Server Discovery.
+        - ``PUBLIC``: Users can lurk in this guild via Server Discovery.
         - ``NEWS``: Guild can create news channels.
         - ``BANNER``: Guild can upload and use a banner (i.e. :meth:`banner_url`).
         - ``ANIMATED_ICON``: Guild can upload an animated icon.
+        - ``MEMBER_LIST_DISABLED``: Member list is disabled.
 
     splash: Optional[:class:`str`]
         The guild's invite splash.
@@ -260,7 +261,7 @@ class Guild(Hashable):
 
     __slots__ = ('afk_timeout', 'afk_channel', '_members', '_channels', 'icon',
                  'name', 'id', 'unavailable', 'banner', 'region', '_state',
-                 '_default_role', '_roles', '_member_count', '_large',
+                 '_roles', '_member_count', '_large',
                  'owner_id', 'mfa_level', 'emojis', 'features',
                  'verification_level', 'explicit_content_filter', 'splash',
                  '_voice_states', '_system_channel_id', 'default_notifications',
@@ -385,7 +386,7 @@ class Guild(Hashable):
         self.max_presences = guild.get('max_presences')
         self.max_members = guild.get('max_members')
         self.premium_tier = guild.get('premium_tier', 0)
-        self.premium_subscription_count = guild.get('premium_subscription_count', 0)
+        self.premium_subscription_count = guild.get('premium_subscription_count') or 0
         self._system_channel_flags = guild.get('system_channel_flags', 0)
         self.preferred_locale = guild.get('preferred_locale')
 
@@ -522,7 +523,18 @@ class Guild(Hashable):
         return as_list
 
     def get_channel(self, channel_id):
-        """Returns a :class:`abc.GuildChannel` with the given ID. If not found, returns None."""
+        """Returns a channel with the given ID.
+
+        Parameters
+        -----------
+        channel_id: :class:`int`
+            The ID to search for.
+
+        Returns
+        --------
+        Optional[:class:`.abc.GuildChannel`]
+            The returned channel or ``None`` if not found.
+        """
         return self._channels.get(channel_id)
 
     @property
@@ -562,7 +574,18 @@ class Guild(Hashable):
         return list(self._members.values())
 
     def get_member(self, user_id):
-        """Returns a :class:`Member` with the given ID. If not found, returns None."""
+        """Returns a member with the given ID.
+
+        Parameters
+        -----------
+        user_id: :class:`int`
+            The ID to search for.
+
+        Returns
+        --------
+        Optional[:class:`Member`]
+            The member or ``None`` if not found.
+        """
         return self._members.get(user_id)
 
     @property
@@ -580,13 +603,24 @@ class Guild(Hashable):
         return sorted(self._roles.values())
 
     def get_role(self, role_id):
-        """Returns a :class:`Role` with the given ID. If not found, returns None."""
+        """Returns a role with the given ID.
+
+        Parameters
+        -----------
+        role_id: :class:`int`
+            The ID to search for.
+
+        Returns
+        --------
+        Optional[:class:`Role`]
+            The role or ``None`` if not found.
+        """
         return self._roles.get(role_id)
 
-    @utils.cached_slot_property('_default_role')
+    @property
     def default_role(self):
         """Gets the @everyone role that all members have by default."""
-        return utils.find(lambda r: r.is_default(), self._roles.values())
+        return self.get_role(self.id)
 
     @property
     def owner(self):
@@ -979,7 +1013,8 @@ class Guild(Hashable):
             The new description of the guild. This is only available to guilds that
             contain `VERIFIED` in :attr:`Guild.features`.
         icon: :class:`bytes`
-            A :term:`py:bytes-like object` representing the icon. Only PNG/JPEG supported.
+            A :term:`py:bytes-like object` representing the icon. Only PNG/JPEG supported
+            and GIF for guilds with ``ANIMATED_ICON`` feature.
             Could be ``None`` to denote removal of the icon.
         banner: :class:`bytes`
             A :term:`py:bytes-like object` representing the banner.
@@ -1095,7 +1130,7 @@ class Guild(Hashable):
                 fields['system_channel_id'] = system_channel.id
 
         if 'owner' in fields:
-            if self.owner != self.me:
+            if self.owner_id != self._state.self_id:
                 raise InvalidArgument('To transfer ownership you must be the owner of the guild.')
 
             fields['owner_id'] = fields['owner'].id
@@ -1844,3 +1879,43 @@ class Guild(Hashable):
         data = await self._state.http.get_widget(self.id)
 
         return Widget(state=self._state, data=data)
+
+    async def query_members(self, query, *, limit=5, cache=True):
+        """|coro|
+
+        Request members that belong to this guild whose username starts with
+        the query given.
+
+        This is a websocket operation and can be slow.
+
+        .. warning::
+
+            Most bots do not need to use this. It's mainly a helper
+            for bots who have disabled ``guild_subscriptions``.
+
+        .. versionadded:: 1.3
+
+        Parameters
+        -----------
+        query: :class:`str`
+            The string that the username's start with. An empty string
+            requests all members.
+        limit: :class:`int`
+            The maximum number of members to send back. This must be
+            a number between 1 and 1000.
+        cache: :class:`bool`
+            Whether to cache the members internally. This makes operations
+            such as :meth:`get_member` work for those that matched.
+
+        Raises
+        -------
+        asyncio.TimeoutError
+            The query timed out waiting for the members.
+
+        Returns
+        --------
+        List[:class:`Member`]
+            The list of members that have matched the query.
+        """
+        limit = limit or 5
+        return await self._state.query_members(self, query=query, limit=limit, cache=cache)

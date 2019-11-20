@@ -112,6 +112,15 @@ class BaseUser(_BaseUser):
 
         return self
 
+    def _to_minimal_user_json(self):
+        return {
+            'name': self.name,
+            'id': self.id,
+            'avatar': self.avatar,
+            'discriminator': self.discriminator,
+            'bot': self.bot,
+        }
+
     @property
     def avatar_url(self):
         """Returns an :class:`Asset` for the avatar the user has.
@@ -166,13 +175,13 @@ class BaseUser(_BaseUser):
 
     @property
     def default_avatar(self):
-        """class:`DefaultAvatar`: Returns the default avatar for a given user. This is calculated by the user's discriminator."""
+        """:class:`DefaultAvatar`: Returns the default avatar for a given user. This is calculated by the user's discriminator."""
         return try_enum(DefaultAvatar, int(self.discriminator) % len(DefaultAvatar))
 
     @property
     def default_avatar_url(self):
         """:class:`Asset`: Returns a URL for a user's default avatar."""
-        return Asset(self._state, 'https://cdn.discordapp.com/embed/avatars/{}.png'.format(self.default_avatar.value))
+        return Asset(self._state, '/embed/avatars/{}.png'.format(self.default_avatar.value))
 
     @property
     def colour(self):
@@ -217,7 +226,7 @@ class BaseUser(_BaseUser):
     def created_at(self):
         """:class:`datetime.datetime`: Returns the user's creation time in UTC.
 
-        This is when the user's discord account was created."""
+        This is when the user's Discord account was created."""
         return snowflake_time(self.id)
 
     @property
@@ -291,10 +300,11 @@ class ClientUser(BaseUser):
         Specifies if the user has MFA turned on and working.
     premium: :class:`bool`
         Specifies if the user is a premium user (e.g. has Discord Nitro).
-    premium_type: :class:`PremiumType`
+    premium_type: Optional[:class:`PremiumType`]
         Specifies the type of premium a user has (e.g. Nitro or Nitro Classic). Could be None if the user is not premium.
     """
-    __slots__ = ('email', 'locale', '_flags', 'verified', 'mfa_enabled',
+    __slots__ = BaseUser.__slots__ + \
+                ('email', 'locale', '_flags', 'verified', 'mfa_enabled',
                  'premium', 'premium_type', '_relationships', '__weakref__')
 
     def __init__(self, *, state, data):
@@ -321,7 +331,7 @@ class ClientUser(BaseUser):
 
         .. note::
 
-            This only applies to non-bot accounts.
+            This can only be used by non-bot accounts.
 
         Parameters
         -----------
@@ -341,7 +351,7 @@ class ClientUser(BaseUser):
 
         .. note::
 
-            This only applies to non-bot accounts.
+            This can only be used by non-bot accounts.
         """
         return list(self._relationships.values())
 
@@ -351,7 +361,7 @@ class ClientUser(BaseUser):
 
         .. note::
 
-            This only applies to non-bot accounts.
+            This can only be used by non-bot accounts.
         """
         return [r.user for r in self._relationships.values() if r.type is RelationshipType.friend]
 
@@ -361,7 +371,7 @@ class ClientUser(BaseUser):
 
         .. note::
 
-            This only applies to non-bot accounts.
+            This can only be used by non-bot accounts.
         """
         return [r.user for r in self._relationships.values() if r.type is RelationshipType.blocked]
 
@@ -473,7 +483,7 @@ class ClientUser(BaseUser):
 
         .. note::
 
-            This only applies to non-bot accounts.
+            This can only be used by non-bot accounts.
 
         Parameters
         -----------
@@ -511,7 +521,7 @@ class ClientUser(BaseUser):
 
         .. note::
 
-            This only applies to non-bot accounts.
+            This can only be used by non-bot accounts.
 
         Parameters
         -------
@@ -650,7 +660,7 @@ class User(BaseUser, discord.abc.Messageable):
         Specifies if the user is a bot account.
     """
 
-    __slots__ = ('__weakref__',)
+    __slots__ = BaseUser.__slots__ + ('__weakref__',)
 
     def __repr__(self):
         return '<User id={0.id} name={0.name!r} discriminator={0.discriminator!r} bot={0.bot}>'.format(self)
@@ -688,7 +698,7 @@ class User(BaseUser, discord.abc.Messageable):
 
         .. note::
 
-            This only applies to non-bot accounts.
+            This can only be used by non-bot accounts.
         """
         return self._state.user.get_relationship(self.id)
 
@@ -699,7 +709,7 @@ class User(BaseUser, discord.abc.Messageable):
 
         .. note::
 
-            This only applies to non-bot accounts.
+            This can only be used by non-bot accounts.
 
         Raises
         -------
@@ -722,7 +732,7 @@ class User(BaseUser, discord.abc.Messageable):
 
         .. note::
 
-            This only applies to non-bot accounts.
+            This can only be used by non-bot accounts.
         """
         r = self.relationship
         if r is None:
@@ -734,7 +744,7 @@ class User(BaseUser, discord.abc.Messageable):
 
         .. note::
 
-            This only applies to non-bot accounts.
+            This can only be used by non-bot accounts.
         """
         r = self.relationship
         if r is None:
@@ -748,7 +758,7 @@ class User(BaseUser, discord.abc.Messageable):
 
         .. note::
 
-            This only applies to non-bot accounts.
+            This can only be used by non-bot accounts.
 
         Raises
         -------
@@ -767,7 +777,7 @@ class User(BaseUser, discord.abc.Messageable):
 
         .. note::
 
-            This only applies to non-bot accounts.
+            This can only be used by non-bot accounts.
 
         Raises
         -------
@@ -785,7 +795,7 @@ class User(BaseUser, discord.abc.Messageable):
 
         .. note::
 
-            This only applies to non-bot accounts.
+            This can only be used by non-bot accounts.
 
         Raises
         -------
@@ -803,7 +813,7 @@ class User(BaseUser, discord.abc.Messageable):
 
         .. note::
 
-            This only applies to non-bot accounts.
+            This can only be used by non-bot accounts.
 
         Raises
         -------
@@ -821,7 +831,7 @@ class User(BaseUser, discord.abc.Messageable):
 
         .. note::
 
-            This only applies to non-bot accounts.
+            This can only be used by non-bot accounts.
 
         Raises
         -------
