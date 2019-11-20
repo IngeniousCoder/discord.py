@@ -748,62 +748,58 @@ class Messageable(metaclass=abc.ABCMeta):
     async def _get_channel(self):
         raise NotImplementedError
 
-    async def send(self, content=None, *, tts=False, embed=None, file=None, files=None, delete_after=None, nonce=None):
+    async def send(self, content=None, *, tts=False, embed=None, file=None, files=None, delete_after=None, nonce=None, mention=False):
         """|coro|
-
         Sends a message to the destination with the content given.
-
         The content must be a type that can convert to a string through ``str(content)``.
         If the content is set to ``None`` (the default), then the ``embed`` parameter must
         be provided.
-
         To upload a single file, the ``file`` parameter should be used with a
-        single :class:`~discord.File` object. To upload multiple files, the ``files``
-        parameter should be used with a :class:`list` of :class:`~discord.File` objects.
+        single :class:`File` object. To upload multiple files, the ``files``
+        parameter should be used with a :class:`list` of :class:`File` objects.
         **Specifying both parameters will lead to an exception**.
-
-        If the ``embed`` parameter is provided, it must be of type :class:`~discord.Embed` and
+        If the ``embed`` parameter is provided, it must be of type :class:`Embed` and
         it must be a rich embed type.
-
         Parameters
         ------------
-        content: :class:`str`
+        content
             The content of the message to send.
-        tts: :class:`bool`
+        tts: bool
             Indicates if the message should be sent using text-to-speech.
-        embed: :class:`~discord.Embed`
+        embed: :class:`Embed`
             The rich embed for the content.
-        file: :class:`~discord.File`
+        file: :class:`File`
             The file to upload.
-        files: List[:class:`~discord.File`]
+        files: List[:class:`File`]
             A list of files to upload. Must be a maximum of 10.
-        nonce: :class:`int`
+        nonce: int
             The nonce to use for sending this message. If the message was successfully sent,
             then the message will have a nonce with this value.
-        delete_after: :class:`float`
+        delete_after: float
             If provided, the number of seconds to wait in the background
             before deleting the message we just sent. If the deletion fails,
             then it is silently ignored.
-
         Raises
         --------
-        ~discord.HTTPException
+        HTTPException
             Sending the message failed.
-        ~discord.Forbidden
+        Forbidden
             You do not have the proper permissions to send the message.
-        ~discord.InvalidArgument
+        InvalidArgument
             The ``files`` list is not of the appropriate size or
             you specified both ``file`` and ``files``.
-
         Returns
         ---------
-        :class:`~discord.Message`
+        :class:`Message`
             The message that was sent.
         """
 
         channel = await self._get_channel()
         state = self._state
-        content = str(content) if content is not None else None
+        if mention:
+            content = content if content is not None else ""
+        else:
+            content = str(content.replace('@everyone', '@\u200beveryone').replace("@here","@\u200bhere")) if content is not None else ""
         if embed is not None:
             embed = embed.to_dict()
 
@@ -815,29 +811,70 @@ class Messageable(metaclass=abc.ABCMeta):
                 raise InvalidArgument('file parameter must be File')
 
             try:
-                data = await state.http.send_files(channel.id, files=[file],
-                                                   content=content, tts=tts, embed=embed, nonce=nonce)
+                # One file. 
+                if len(content) > 1999:
+                  #SEND IN OUTPUT
+                  file2 = open("output.txt","w")
+                  file2.write(content)
+                  file2.close()
+                  f2 = open("output.txt","rb")
+                  file2 = File(fp=f2)
+                  data = await state.http.send_files(channel.id, files=[file,file2],
+                                                     content="Oops, the output is longer then 2000 characters. The output has been sent in output.txt.", tts=tts, embed=embed, nonce=nonce)
+                  f2.close()
+                else:
+                  data = await state.http.send_files(channel.id, files=[file],
+                                                     content=content, tts=tts, embed=embed, nonce=nonce)
             finally:
                 file.close()
 
         elif files is not None:
-            if len(files) > 10:
-                raise InvalidArgument('files parameter must be a list of up to 10 elements')
-            elif not all(isinstance(file, File) for file in files):
-                raise InvalidArgument('files parameter must be a list of File')
+            if len(files) > 9:
+                raise InvalidArgument('files parameter must be a list of up to 9 elements')
 
             try:
-                data = await state.http.send_files(channel.id, files=files, content=content, tts=tts,
+                # Multiple files!
+                param = [f for f in files]
+                if len(content) > 1999:
+                  #SEND IN OUTPUT
+                  file2 = open("output.txt","w")
+                  file2.write(content)
+                  file2.close()
+                  f2 = open("output.txt","rb")
+                  file2 = File(fp=f2)
+                  param.append(file2)
+                  data = await state.http.send_files(channel.id, files=param,
+                                                     content="Oops, the output is longer then 2000 characters. The output has been sent in output.txt.", tts=tts, embed=embed, nonce=nonce)
+                  f2.close()
+                else:
+                  data = await state.http.send_files(channel.id, files=param, content=content, tts=tts,
                                                    embed=embed, nonce=nonce)
             finally:
                 for f in files:
                     f.close()
         else:
-            data = await state.http.send_message(channel.id, content, tts=tts, embed=embed, nonce=nonce)
+            if len(content) > 1999:
+                #SEND IN OUTPUT
+                file = open("output.txt","w")
+                file.write(content)
+                file.close()
+                f2 = open("output.txt","rb")
+                file = File(fp=f2)
+                data = await state.http.send_files(channel.id, files=[file],
+                                                   content="Oops, the output is longer then 2000 characters. The output has been sent in output.txt.", tts=tts, embed=embed, nonce=nonce)
+                f2.close()
+            else:
+                data = await state.http.send_message(channel.id, content, tts=tts, embed=embed, nonce=nonce)
 
         ret = state.create_message(channel=channel, data=data)
         if delete_after is not None:
-            await ret.delete(delay=delete_after)
+            async def delete():
+                await asyncio.sleep(delete_after, loop=state.loop)
+                try:
+                    await ret.delete()
+                except HTTPException:
+                    pass
+            asyncio.ensure_future(delete(), loop=state.loop)
         return ret
 
     async def trigger_typing(self):
