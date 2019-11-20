@@ -5696,7 +5696,7 @@ msgstr ""
 msgid ""
 "This is returned as a dictionary where the key contains the target which "
 "can be either a :class:`~discord.Role` or a :class:`~discord.Member` and "
-"the key is the overwrite as a :class:`~discord.PermissionOverwrite`."
+"the value is the overwrite as a :class:`~discord.PermissionOverwrite`."
 msgstr ""
 
 #: discord.CategoryChannel.overwrites:7 discord.TextChannel.overwrites:7
@@ -6530,7 +6530,7 @@ msgstr "該当すれば :class:`Relationship` が返ります。"
 #: discord.User.mutual_friends:7 discord.User.profile:7
 #: discord.User.relationship:5 discord.User.remove_friend:7
 #: discord.User.send_friend_request:7 discord.User.unblock:7 of
-msgid "This only applies to non-bot accounts."
+msgid "This can only be used by non-bot accounts."
 msgstr ""
 
 #: discord.ClientUser.get_relationship:7 of

@@ -60,7 +60,13 @@ Voice
 .. autoclass:: PCMAudio
     :members:
 
+.. autoclass:: FFmpegAudio
+    :members:
+
 .. autoclass:: FFmpegPCMAudio
+    :members:
+
+.. autoclass:: FFmpegOpusAudio
     :members:
 
 .. autoclass:: PCMVolumeTransformer
@@ -302,6 +308,7 @@ to handle it, which defaults to print a traceback and ignoring the exception.
 
         - For performance reasons, the embed server does not do this in a "consistent" manner.
 
+    - The message's embeds were suppressed or unsuppressed.
     - A call message has received an update to its participants or ending time.
 
     :param before: The previous version of the message.
@@ -476,7 +483,7 @@ to handle it, which defaults to print a traceback and ignoring the exception.
     This is called when one or more of the following things change:
 
     - status
-    - game playing
+    - activity
     - nickname
     - roles
 
@@ -565,9 +572,9 @@ to handle it, which defaults to print a traceback and ignoring the exception.
     :param guild: The guild who got their emojis updated.
     :type guild: :class:`Guild`
     :param before: A list of emojis before the update.
-    :type before: List[:class:`Emoji`]
+    :type before: Sequence[:class:`Emoji`]
     :param after: A list of emojis after the update.
-    :type after: List[:class:`Emoji`]
+    :type after: Sequence[:class:`Emoji`]
 
 .. function:: on_guild_available(guild)
               on_guild_unavailable(guild)
@@ -754,6 +761,9 @@ of :class:`enum.Enum`.
     Specifies the type of :class:`Message`. This is used to denote if a message
     is to be interpreted as a system message or a regular message.
 
+    .. versionchanged:: 1.3.0
+        The ``channel_follow_add`` attribute was added.
+
     .. attribute:: default
 
         The default message type. This is the same as regular messages.
@@ -797,6 +807,9 @@ of :class:`enum.Enum`.
 
         The system message denoting that a member has "nitro boosted" a guild
         and it achieved level 3.
+    .. attribute:: channel_follow_add
+
+        The system message denoting that an announcement channel has been followed.
 
 .. class:: ActivityType
 
@@ -836,6 +849,12 @@ of :class:`enum.Enum`.
 .. class:: VoiceRegion
 
     Specifies the region a voice server belongs to.
+    
+    .. versionchanged:: 1.2
+        The ``india`` region was added.
+    
+    .. versionchanged:: 1.3
+        The ``europe`` region was added.
 
     .. attribute:: amsterdam
 
@@ -849,6 +868,9 @@ of :class:`enum.Enum`.
     .. attribute:: eu_west
 
         The EU West region.
+    .. attribute:: europe
+    
+        The Europe region.
     .. attribute:: frankfurt
 
         The Frankfurt region.
