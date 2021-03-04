@@ -352,7 +352,7 @@ class DiscordWebSocket(websockets.client.WebSocketClientProtocol):
         log.info('Shard ID %s has sent the RESUME payload.', self.shard_id)
 
     async def received_message(self, msg):
-        self._dispatch('socket_raw_receive', msg)
+        #self._dispatch('socket_raw_receive', msg)
 
         if type(msg) is bytes:
             self._buffer.extend(msg)
@@ -370,6 +370,7 @@ class DiscordWebSocket(websockets.client.WebSocketClientProtocol):
         msg = json.loads(msg)
 
         log.debug('For Shard ID %s: WebSocket Event: %s', self.shard_id, msg)
+        self._dispatch('socket_raw_receive', msg)
         self._dispatch('socket_response', msg)
 
         op = msg.get('op')
