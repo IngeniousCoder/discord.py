@@ -3,7 +3,7 @@
 """
 The MIT License (MIT)
 
-Copyright (c) 2015-2020 Rapptz
+Copyright (c) 2015-present Rapptz
 
 Permission is hereby granted, free of charge, to any person obtaining a
 copy of this software and associated documentation files (the "Software"),
@@ -27,7 +27,6 @@ DEALINGS IN THE SOFTWARE.
 import asyncio
 import datetime
 import aiohttp
-import websockets
 import discord
 import inspect
 import logging
@@ -46,20 +45,17 @@ class Loop:
     def __init__(self, coro, seconds, hours, minutes, count, reconnect, loop):
         self.coro = coro
         self.reconnect = reconnect
-        self.loop = loop or asyncio.get_event_loop()
+        self.loop = loop
         self.count = count
         self._current_loop = 0
         self._task = None
         self._injected = None
         self._valid_exception = (
             OSError,
-            discord.HTTPException,
             discord.GatewayNotFound,
             discord.ConnectionClosed,
             aiohttp.ClientError,
             asyncio.TimeoutError,
-            websockets.InvalidHandshake,
-            websockets.WebSocketProtocolError,
         )
 
         self._before_loop = None
@@ -72,6 +68,7 @@ class Loop:
             raise ValueError('count must be greater than 0 or None.')
 
         self.change_interval(seconds=seconds, minutes=minutes, hours=hours)
+        self._last_iteration_failed = False
         self._last_iteration = None
         self._next_iteration = None
 
@@ -92,18 +89,22 @@ class Loop:
         backoff = ExponentialBackoff()
         await self._call_loop_function('before_loop')
         sleep_until = discord.utils.sleep_until
+        self._last_iteration_failed = False
         self._next_iteration = datetime.datetime.now(datetime.timezone.utc)
         try:
             await asyncio.sleep(0) # allows canceling in before_loop
             while True:
-                self._last_iteration = self._next_iteration
-                self._next_iteration = self._get_next_sleep_time()
+                if not self._last_iteration_failed:
+                    self._last_iteration = self._next_iteration
+                    self._next_iteration = self._get_next_sleep_time()
                 try:
                     await self.coro(*args, **kwargs)
+                    self._last_iteration_failed = False
                     now = datetime.datetime.now(datetime.timezone.utc)
                     if now > self._next_iteration:
                         self._next_iteration = now
-                except self._valid_exception as exc:
+                except self._valid_exception:
+                    self._last_iteration_failed = True
                     if not self.reconnect:
                         raise
                     await asyncio.sleep(backoff.delay())
@@ -153,11 +154,31 @@ class Loop:
 
         .. versionadded:: 1.3
         """
-        if self._task is None and self._sleep:
+        if self._task is None:
             return None
         elif self._task and self._task.done() or self._stop_next_iteration:
             return None
         return self._next_iteration
+
+    async def __call__(self, *args, **kwargs):
+        r"""|coro|
+
+        Calls the internal callback that the task holds.
+
+        .. versionadded:: 1.6
+
+        Parameters
+        ------------
+        \*args
+            The arguments to use.
+        \*\*kwargs
+            The keyword arguments to use.
+        """
+
+        if self._injected is not None:
+            args = (self._injected, *args)
+
+        return await self.coro(*args, **kwargs)
 
     def start(self, *args, **kwargs):
         r"""Starts the internal task in the event loop.
@@ -185,6 +206,9 @@ class Loop:
 
         if self._injected is not None:
             args = (self._injected, *args)
+
+        if self.loop is None:
+            self.loop = asyncio.get_event_loop()
 
         self._task = self.loop.create_task(self._loop(*args, **kwargs))
         return self._task

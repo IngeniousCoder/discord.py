@@ -3,7 +3,7 @@
 """
 The MIT License (MIT)
 
-Copyright (c) 2015-2020 Rapptz
+Copyright (c) 2015-present Rapptz
 
 Permission is hereby granted, free of charge, to any person obtaining a
 copy of this software and associated documentation files (the "Software"),
@@ -29,9 +29,8 @@ from .utils import parse_time, snowflake_time, _get_as_snowflake
 from .object import Object
 from .mixins import Hashable
 from .enums import ChannelType, VerificationLevel, try_enum
-from collections import namedtuple
 
-class PartialInviteChannel(namedtuple('PartialInviteChannel', 'id name type')):
+class PartialInviteChannel:
     """Represents a "partial" invite channel.
 
     This model will be given when the user is not part of the
@@ -65,10 +64,18 @@ class PartialInviteChannel(namedtuple('PartialInviteChannel', 'id name type')):
         The partial channel's type.
     """
 
-    __slots__ = ()
+    __slots__ = ('id', 'name', 'type')
+
+    def __init__(self, **kwargs):
+        self.id = kwargs.pop('id')
+        self.name = kwargs.pop('name')
+        self.type = kwargs.pop('type')
 
     def __str__(self):
         return self.name
+
+    def __repr__(self):
+        return '<PartialInviteChannel id={0.id} name={0.name} type={0.type!r}>'.format(self)
 
     @property
     def mention(self):
@@ -154,7 +161,7 @@ class PartialInviteGuild:
     def icon_url(self):
         """:class:`Asset`: Returns the guild's icon asset."""
         return self.icon_url_as()
-    
+
     def is_icon_animated(self):
         """:class:`bool`: Returns ``True`` if the guild has an animated icon.
 
@@ -251,7 +258,8 @@ class Invite(Hashable):
     Attributes
     -----------
     max_age: :class:`int`
-        How long the before the invite expires in seconds. A value of 0 indicates that it doesn't expire.
+        How long the before the invite expires in seconds.
+        A value of ``0`` indicates that it doesn't expire.
     code: :class:`str`
         The URL fragment used for the invite.
     guild: Optional[Union[:class:`Guild`, :class:`Object`, :class:`PartialInviteGuild`]]
@@ -267,6 +275,7 @@ class Invite(Hashable):
         How many times the invite has been used.
     max_uses: :class:`int`
         How many times the invite can be used.
+        A value of ``0`` indicates that it has unlimited uses.
     inviter: :class:`User`
         The user who created the invite.
     approximate_member_count: Optional[:class:`int`]

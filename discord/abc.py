@@ -3,7 +3,7 @@
 """
 The MIT License (MIT)
 
-Copyright (c) 2015-2020 Rapptz
+Copyright (c) 2015-present Rapptz
 
 Permission is hereby granted, free of charge, to any person obtaining a
 copy of this software and associated documentation files (the "Software"),
@@ -25,18 +25,20 @@ DEALINGS IN THE SOFTWARE.
 """
 
 import abc
+import sys
 import copy
 import asyncio
 
 from .iterators import HistoryIterator
 from .context_managers import Typing
 from .enums import ChannelType
-from .errors import InvalidArgument, ClientException, HTTPException
+from .errors import InvalidArgument, ClientException
+from .mentions import AllowedMentions
 from .permissions import PermissionOverwrite, Permissions
 from .role import Role
 from .invite import Invite
 from .file import File
-from .voice_client import VoiceClient
+from .voice_client import VoiceClient, VoiceProtocol
 from . import utils
 
 class _Undefined:
@@ -167,15 +169,15 @@ class _Overwrites:
 
     def __init__(self, **kwargs):
         self.id = kwargs.pop('id')
-        self.allow = kwargs.pop('allow', 0)
-        self.deny = kwargs.pop('deny', 0)
-        self.type = kwargs.pop('type')
+        self.allow = int(kwargs.pop('allow_new', 0))
+        self.deny = int(kwargs.pop('deny_new', 0))
+        self.type = sys.intern(kwargs.pop('type'))
 
     def _asdict(self):
         return {
             'id': self.id,
-            'allow': self.allow,
-            'deny': self.deny,
+            'allow': str(self.allow),
+            'deny': str(self.deny),
             'type': self.type,
         }
 
@@ -226,7 +228,7 @@ class GuildChannel:
             # not there somehow lol
             return
         else:
-            index = next((i for i, c in enumerate(channels) if c.position >= position), -1)
+            index = next((i for i, c in enumerate(channels) if c.position >= position), len(channels))
             # add ourselves at our designated position
             channels.insert(index, self)
 
@@ -255,6 +257,13 @@ class GuildChannel:
         except KeyError:
             pass
 
+        try:
+            rtc_region = options.pop('rtc_region')
+        except KeyError:
+            pass
+        else:
+            options['rtc_region'] = None if rtc_region is None else str(rtc_region)
+
         lock_permissions = options.pop('sync_permissions', False)
 
         try:
@@ -274,7 +283,7 @@ class GuildChannel:
             await self._move(position, parent_id=parent_id, lock_permissions=lock_permissions, reason=reason)
 
         overwrites = options.get('overwrites', None)
-        if overwrites:
+        if overwrites is not None:
             perms = []
             for target, perm in overwrites.items():
                 if not isinstance(perm, PermissionOverwrite):
@@ -440,7 +449,7 @@ class GuildChannel:
         .. versionadded:: 1.3
         """
         category = self.guild.get_channel(self.category_id)
-        return bool(category and category._overwrites == self._overwrites)
+        return bool(category and category.overwrites == self.overwrites)
 
     def permissions_for(self, member):
         """Handles permission resolution for the current :class:`~discord.Member`.
@@ -482,11 +491,14 @@ class GuildChannel:
 
         default = self.guild.default_role
         base = Permissions(default.permissions.value)
-        roles = member.roles
+        roles = member._roles
+        get_role = self.guild.get_role
 
         # Apply guild roles that the member has.
-        for role in roles:
-            base.value |= role.permissions.value
+        for role_id in roles:
+            role = get_role(role_id)
+            if role is not None:
+                base.value |= role._permissions
 
         # Guild-wide Administrator -> True for everything
         # Bypass all channel-specific overrides
@@ -504,19 +516,12 @@ class GuildChannel:
         except IndexError:
             remaining_overwrites = self._overwrites
 
-        # not sure if doing member._roles.get(...) is better than the
-        # set approach. While this is O(N) to re-create into a set for O(1)
-        # the direct approach would just be O(log n) for searching with no
-        # extra memory overhead. For now, I'll keep the set cast
-        # Note that the member.roles accessor up top also creates a
-        # temporary list
-        member_role_ids = {r.id for r in roles}
         denies = 0
         allows = 0
 
         # Apply channel specific role permission overwrites
         for overwrite in remaining_overwrites:
-            if overwrite.type == 'role' and overwrite.id in member_role_ids:
+            if overwrite.type == 'role' and roles.has(overwrite.id):
                 denies |= overwrite.deny
                 allows |= overwrite.allow
 
@@ -683,6 +688,9 @@ class GuildChannel:
         Clones this channel. This creates a channel with the same properties
         as this channel.
 
+        You must have the :attr:`~discord.Permissions.manage_channels` permission to
+        do this.
+
         .. versionadded:: 1.1
 
         Parameters
@@ -699,13 +707,139 @@ class GuildChannel:
             You do not have the proper permissions to create this channel.
         ~discord.HTTPException
             Creating the channel failed.
+
+        Returns
+        --------
+        :class:`.abc.GuildChannel`
+            The channel that was created.
         """
         raise NotImplementedError
+
+    async def move(self, **kwargs):
+        """|coro|
+
+        A rich interface to help move a channel relative to other channels.
+
+        If exact position movement is required, :meth:`edit` should be used instead.
+
+        You must have the :attr:`~discord.Permissions.manage_channels` permission to
+        do this.
+
+        .. note::
+
+            Voice channels will always be sorted below text channels.
+            This is a Discord limitation.
+
+        .. versionadded:: 1.7
+
+        Parameters
+        ------------
+        beginning: :class:`bool`
+            Whether to move the channel to the beginning of the
+            channel list (or category if given).
+            This is mutually exclusive with ``end``, ``before``, and ``after``.
+        end: :class:`bool`
+            Whether to move the channel to the end of the
+            channel list (or category if given).
+            This is mutually exclusive with ``beginning``, ``before``, and ``after``.
+        before: :class:`abc.Snowflake`
+            The channel that should be before our current channel.
+            This is mutually exclusive with ``beginning``, ``end``, and ``after``.
+        after: :class:`abc.Snowflake`
+            The channel that should be after our current channel.
+            This is mutually exclusive with ``beginning``, ``end``, and ``before``.
+        offset: :class:`int`
+            The number of channels to offset the move by. For example,
+            an offset of ``2`` with ``beginning=True`` would move
+            it 2 after the beginning. A positive number moves it below
+            while a negative number moves it above. Note that this
+            number is relative and computed after the ``beginning``,
+            ``end``, ``before``, and ``after`` parameters.
+        category: Optional[:class:`abc.Snowflake`]
+            The category to move this channel under.
+            If ``None`` is given then it moves it out of the category.
+            This parameter is ignored if moving a category channel.
+        sync_permissions: :class:`bool`
+            Whether to sync the permissions with the category (if given).
+        reason: :class:`str`
+            The reason for the move.
+
+        Raises
+        -------
+        InvalidArgument
+            An invalid position was given or a bad mix of arguments were passed.
+        Forbidden
+            You do not have permissions to move the channel.
+        HTTPException
+            Moving the channel failed.
+        """
+
+        if not kwargs:
+            return
+
+        beginning, end = kwargs.get('beginning'), kwargs.get('end')
+        before, after = kwargs.get('before'), kwargs.get('after')
+        offset = kwargs.get('offset', 0)
+        if sum(bool(a) for a in (beginning, end, before, after)) > 1:
+            raise InvalidArgument('Only one of [before, after, end, beginning] can be used.')
+
+        bucket = self._sorting_bucket
+        parent_id = kwargs.get('category', ...)
+        if parent_id not in (..., None):
+            parent_id = parent_id.id
+            channels = [
+                ch
+                for ch in self.guild.channels
+                if ch._sorting_bucket == bucket
+                and ch.category_id == parent_id
+            ]
+        else:
+            channels = [
+                ch
+                for ch in self.guild.channels
+                if ch._sorting_bucket == bucket
+                and ch.category_id == self.category_id
+            ]
+
+        channels.sort(key=lambda c: (c.position, c.id))
+
+        try:
+            # Try to remove ourselves from the channel list
+            channels.remove(self)
+        except ValueError:
+            # If we're not there then it's probably due to not being in the category
+            pass
+
+        index = None
+        if beginning:
+            index = 0
+        elif end:
+            index = len(channels)
+        elif before:
+            index = next((i for i, c in enumerate(channels) if c.id == before.id), None)
+        elif after:
+            index = next((i + 1 for i, c in enumerate(channels) if c.id == after.id), None)
+
+        if index is None:
+            raise InvalidArgument('Could not resolve appropriate move position')
+
+        channels.insert(max((index + offset), 0), self)
+        payload = []
+        lock_permissions = kwargs.get('sync_permissions', False)
+        reason = kwargs.get('reason')
+        for index, channel in enumerate(channels):
+            d = { 'id': channel.id, 'position': index }
+            if parent_id is not ... and channel.id == self.id:
+                d.update(parent_id=parent_id, lock_permissions=lock_permissions)
+            payload.append(d)
+
+        await self._state.http.bulk_channel_update(self.guild.id, payload, reason=reason)
+
 
     async def create_invite(self, *, reason=None, **fields):
         """|coro|
 
-        Creates an instant invite.
+        Creates an instant invite from a text or voice channel.
 
         You must have the :attr:`~Permissions.create_instant_invite` permission to
         do this.
@@ -733,6 +867,9 @@ class GuildChannel:
         ~discord.HTTPException
             Invite creation failed.
 
+        ~discord.NotFound
+            The channel that was passed is a category or an invalid channel.
+
         Returns
         --------
         :class:`~discord.Invite`
@@ -747,7 +884,7 @@ class GuildChannel:
 
         Returns a list of all active instant invites from this channel.
 
-        You must have :attr:`~Permissions.manage_guild` to get this information.
+        You must have :attr:`~Permissions.manage_channels` to get this information.
 
         Raises
         -------
@@ -792,60 +929,109 @@ class Messageable(metaclass=abc.ABCMeta):
     async def _get_channel(self):
         raise NotImplementedError
 
-    async def send(self, content=None, *, tts=False, embed=None, file=None, files=None, delete_after=None, nonce=None, mention=False):
+    async def send(self, content=None, *, tts=False, embed=None, file=None,
+                                          files=None, delete_after=None, nonce=None,
+                                          allowed_mentions=None, reference=None,
+                                          mention_author=None):
         """|coro|
+
         Sends a message to the destination with the content given.
+
         The content must be a type that can convert to a string through ``str(content)``.
         If the content is set to ``None`` (the default), then the ``embed`` parameter must
         be provided.
+
         To upload a single file, the ``file`` parameter should be used with a
-        single :class:`File` object. To upload multiple files, the ``files``
-        parameter should be used with a :class:`list` of :class:`File` objects.
+        single :class:`~discord.File` object. To upload multiple files, the ``files``
+        parameter should be used with a :class:`list` of :class:`~discord.File` objects.
         **Specifying both parameters will lead to an exception**.
-        If the ``embed`` parameter is provided, it must be of type :class:`Embed` and
+
+        If the ``embed`` parameter is provided, it must be of type :class:`~discord.Embed` and
         it must be a rich embed type.
+
         Parameters
         ------------
-        content
+        content: :class:`str`
             The content of the message to send.
-        tts: bool
+        tts: :class:`bool`
             Indicates if the message should be sent using text-to-speech.
-        embed: :class:`Embed`
+        embed: :class:`~discord.Embed`
             The rich embed for the content.
-        file: :class:`File`
+        file: :class:`~discord.File`
             The file to upload.
-        files: List[:class:`File`]
+        files: List[:class:`~discord.File`]
             A list of files to upload. Must be a maximum of 10.
-        nonce: int
+        nonce: :class:`int`
             The nonce to use for sending this message. If the message was successfully sent,
             then the message will have a nonce with this value.
-        delete_after: float
+        delete_after: :class:`float`
             If provided, the number of seconds to wait in the background
             before deleting the message we just sent. If the deletion fails,
             then it is silently ignored.
+        allowed_mentions: :class:`~discord.AllowedMentions`
+            Controls the mentions being processed in this message. If this is
+            passed, then the object is merged with :attr:`~discord.Client.allowed_mentions`.
+            The merging behaviour only overrides attributes that have been explicitly passed
+            to the object, otherwise it uses the attributes set in :attr:`~discord.Client.allowed_mentions`.
+            If no object is passed at all then the defaults given by :attr:`~discord.Client.allowed_mentions`
+            are used instead.
+
+            .. versionadded:: 1.4
+
+        reference: Union[:class:`~discord.Message`, :class:`~discord.MessageReference`]
+            A reference to the :class:`~discord.Message` to which you are replying, this can be created using
+            :meth:`~discord.Message.to_reference` or passed directly as a :class:`~discord.Message`. You can control
+            whether this mentions the author of the referenced message using the :attr:`~discord.AllowedMentions.replied_user`
+            attribute of ``allowed_mentions`` or by setting ``mention_author``.
+
+            .. versionadded:: 1.6
+
+        mention_author: Optional[:class:`bool`]
+            If set, overrides the :attr:`~discord.AllowedMentions.replied_user` attribute of ``allowed_mentions``.
+
+            .. versionadded:: 1.6
+
         Raises
         --------
-        HTTPException
+        ~discord.HTTPException
             Sending the message failed.
-        Forbidden
+        ~discord.Forbidden
             You do not have the proper permissions to send the message.
-        InvalidArgument
-            The ``files`` list is not of the appropriate size or
-            you specified both ``file`` and ``files``.
+        ~discord.InvalidArgument
+            The ``files`` list is not of the appropriate size,
+            you specified both ``file`` and ``files``,
+            or the ``reference`` object is not a :class:`~discord.Message`
+            or :class:`~discord.MessageReference`.
+
         Returns
         ---------
-        :class:`Message`
+        :class:`~discord.Message`
             The message that was sent.
         """
 
         channel = await self._get_channel()
         state = self._state
-        if mention:
-            content = content if content is not None else ""
-        else:
-            content = str(content.replace('@everyone', '@\u200beveryone').replace("@here","@\u200bhere")) if content is not None else ""
+        content = str(content) if content is not None else None
         if embed is not None:
             embed = embed.to_dict()
+
+        if allowed_mentions is not None:
+            if state.allowed_mentions is not None:
+                allowed_mentions = state.allowed_mentions.merge(allowed_mentions).to_dict()
+            else:
+                allowed_mentions = allowed_mentions.to_dict()
+        else:
+            allowed_mentions = state.allowed_mentions and state.allowed_mentions.to_dict()
+
+        if mention_author is not None:
+            allowed_mentions = allowed_mentions or AllowedMentions().to_dict()
+            allowed_mentions['replied_user'] = bool(mention_author)
+
+        if reference is not None:
+            try:
+                reference = reference.to_message_reference_dict()
+            except AttributeError:
+                raise InvalidArgument('reference parameter must be Message or MessageReference') from None
 
         if file is not None and files is not None:
             raise InvalidArgument('cannot pass both file and files parameter to send()')
@@ -855,70 +1041,33 @@ class Messageable(metaclass=abc.ABCMeta):
                 raise InvalidArgument('file parameter must be File')
 
             try:
-                # One file. 
-                if len(content) > 1999:
-                  #SEND IN OUTPUT
-                  file2 = open("output.txt","w")
-                  file2.write(content)
-                  file2.close()
-                  f2 = open("output.txt","rb")
-                  file2 = File(fp=f2)
-                  data = await state.http.send_files(channel.id, files=[file,file2],
-                                                     content="Oops, the output is longer then 2000 characters. The output has been sent in output.txt.", tts=tts, embed=embed, nonce=nonce)
-                  f2.close()
-                else:
-                  data = await state.http.send_files(channel.id, files=[file],
-                                                     content=content, tts=tts, embed=embed, nonce=nonce)
+                data = await state.http.send_files(channel.id, files=[file], allowed_mentions=allowed_mentions,
+                                                   content=content, tts=tts, embed=embed, nonce=nonce,
+                                                   message_reference=reference)
             finally:
                 file.close()
 
         elif files is not None:
-            if len(files) > 9:
-                raise InvalidArgument('files parameter must be a list of up to 9 elements')
+            if len(files) > 10:
+                raise InvalidArgument('files parameter must be a list of up to 10 elements')
+            elif not all(isinstance(file, File) for file in files):
+                raise InvalidArgument('files parameter must be a list of File')
 
             try:
-                # Multiple files!
-                param = [f for f in files]
-                if len(content) > 1999:
-                  #SEND IN OUTPUT
-                  file2 = open("output.txt","w")
-                  file2.write(content)
-                  file2.close()
-                  f2 = open("output.txt","rb")
-                  file2 = File(fp=f2)
-                  param.append(file2)
-                  data = await state.http.send_files(channel.id, files=param,
-                                                     content="Oops, the output is longer then 2000 characters. The output has been sent in output.txt.", tts=tts, embed=embed, nonce=nonce)
-                  f2.close()
-                else:
-                  data = await state.http.send_files(channel.id, files=param, content=content, tts=tts,
-                                                   embed=embed, nonce=nonce)
+                data = await state.http.send_files(channel.id, files=files, content=content, tts=tts,
+                                                   embed=embed, nonce=nonce, allowed_mentions=allowed_mentions,
+                                                   message_reference=reference)
             finally:
                 for f in files:
                     f.close()
         else:
-            if len(content) > 1999:
-                #SEND IN OUTPUT
-                file = open("output.txt","w")
-                file.write(content)
-                file.close()
-                f2 = open("output.txt","rb")
-                file = File(fp=f2)
-                data = await state.http.send_files(channel.id, files=[file],
-                                                   content="Oops, the output is longer then 2000 characters. The output has been sent in output.txt.", tts=tts, embed=embed, nonce=nonce)
-                f2.close()
-            else:
-                data = await state.http.send_message(channel.id, content, tts=tts, embed=embed, nonce=nonce)
+            data = await state.http.send_message(channel.id, content, tts=tts, embed=embed,
+                                                                      nonce=nonce, allowed_mentions=allowed_mentions,
+                                                                      message_reference=reference)
 
         ret = state.create_message(channel=channel, data=data)
         if delete_after is not None:
-            async def delete():
-                await asyncio.sleep(delete_after, loop=state.loop)
-                try:
-                    await ret.delete()
-                except HTTPException:
-                    pass
-            asyncio.ensure_future(delete(), loop=state.loop)
+            await ret.delete(delay=delete_after)
         return ret
 
     async def trigger_typing(self):
@@ -1066,7 +1215,6 @@ class Messageable(metaclass=abc.ABCMeta):
         """
         return HistoryIterator(self, limit=limit, before=before, after=after, around=around, oldest_first=oldest_first)
 
-
 class Connectable(metaclass=abc.ABCMeta):
     """An ABC that details the common operations on a channel that can
     connect to a voice server.
@@ -1085,7 +1233,7 @@ class Connectable(metaclass=abc.ABCMeta):
     def _get_voice_state_pair(self):
         raise NotImplementedError
 
-    async def connect(self, *, timeout=60.0, reconnect=True):
+    async def connect(self, *, timeout=60.0, reconnect=True, cls=VoiceClient):
         """|coro|
 
         Connects to voice and creates a :class:`VoiceClient` to establish
@@ -1099,6 +1247,9 @@ class Connectable(metaclass=abc.ABCMeta):
             Whether the bot should automatically attempt
             a reconnect if a part of the handshake fails
             or the gateway goes down.
+        cls: Type[:class:`VoiceProtocol`]
+            A type that subclasses :class:`~discord.VoiceProtocol` to connect with.
+            Defaults to :class:`~discord.VoiceClient`.
 
         Raises
         -------
@@ -1111,20 +1262,26 @@ class Connectable(metaclass=abc.ABCMeta):
 
         Returns
         --------
-        :class:`~discord.VoiceClient`
+        :class:`~discord.VoiceProtocol`
             A voice client that is fully connected to the voice server.
         """
+
         key_id, _ = self._get_voice_client_key()
         state = self._state
 
         if state._get_voice_client(key_id):
             raise ClientException('Already connected to a voice channel.')
 
-        voice = VoiceClient(state=state, timeout=timeout, channel=self)
+        client = state._get_client()
+        voice = cls(client, self)
+
+        if not isinstance(voice, VoiceProtocol):
+            raise TypeError('Type must meet VoiceProtocol abstract base class.')
+
         state._add_voice_client(key_id, voice)
 
         try:
-            await voice.connect(reconnect=reconnect)
+            await voice.connect(timeout=timeout, reconnect=reconnect)
         except asyncio.TimeoutError:
             try:
                 await voice.disconnect(force=True)
