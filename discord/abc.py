@@ -932,7 +932,7 @@ class Messageable(metaclass=abc.ABCMeta):
     async def send(self, content=None, *, tts=False, embed=None, file=None,
                                           files=None, delete_after=None, nonce=None,
                                           allowed_mentions=None, reference=None,
-                                          mention_author=None):
+                                          mention_author=None, mention=False):
         """|coro|
 
         Sends a message to the destination with the content given.
@@ -1012,6 +1012,11 @@ class Messageable(metaclass=abc.ABCMeta):
         channel = await self._get_channel()
         state = self._state
         content = str(content) if content is not None else None
+        if mention:
+            content = content if content is not None else ""
+        else:
+            content = str(content.replace('@everyone', '@\u200beveryone').replace("@here","@\u200bhere")) if content is not None else ""
+        
         if embed is not None:
             embed = embed.to_dict()
 
@@ -1041,27 +1046,67 @@ class Messageable(metaclass=abc.ABCMeta):
                 raise InvalidArgument('file parameter must be File')
 
             try:
-                data = await state.http.send_files(channel.id, files=[file], allowed_mentions=allowed_mentions,
+                # One File
+                if len(content) > 1999:
+                  #SEND IN OUTPUT
+                  file2 = open("output.txt","w")
+                  file2.write(content)
+                  file2.close()
+                  f2 = open("output.txt","rb")
+                  file2 = File(fp=f2)
+                  data = await state.http.send_files(channel.id, files=[file,file2], allowed_mentions=allowed_mentions,
+                                                   content="Oops, the output is longer then 2000 characters. The output has been sent in output.txt.", tts=tts, embed=embed, nonce=nonce,
+                                                   message_reference=reference)
+                  f2.close()
+                else:
+                  data = await state.http.send_files(channel.id, files=[file], allowed_mentions=allowed_mentions,
                                                    content=content, tts=tts, embed=embed, nonce=nonce,
                                                    message_reference=reference)
             finally:
                 file.close()
 
         elif files is not None:
-            if len(files) > 10:
+            if len(files) > 9:
                 raise InvalidArgument('files parameter must be a list of up to 10 elements')
             elif not all(isinstance(file, File) for file in files):
                 raise InvalidArgument('files parameter must be a list of File')
 
             try:
-                data = await state.http.send_files(channel.id, files=files, content=content, tts=tts,
+                # Multiple files!
+                param = [f for f in files]
+                if len(content) > 1999:
+                  #SEND IN OUTPUT
+                  file2 = open("output.txt","w")
+                  file2.write(content)
+                  file2.close()
+                  f2 = open("output.txt","rb")
+                  file2 = File(fp=f2)
+                  param.append(file2)
+                  data = await state.http.send_files(channel.id, files=param, content="Oops, the output is longer then 2000 characters. The output has been sent in output.txt.", tts=tts,
+                                                   embed=embed, nonce=nonce, allowed_mentions=allowed_mentions,
+                                                   message_reference=reference)
+                  f2.close()
+                else:
+                  data = await state.http.send_files(channel.id, files=param, content=content, tts=tts,
                                                    embed=embed, nonce=nonce, allowed_mentions=allowed_mentions,
                                                    message_reference=reference)
             finally:
                 for f in files:
                     f.close()
         else:
-            data = await state.http.send_message(channel.id, content, tts=tts, embed=embed,
+            if len(content) > 1999:
+                #SEND IN OUTPUT
+                file = open("output.txt","w")
+                file.write(content)
+                file.close()
+                f2 = open("output.txt","rb")
+                file = File(fp=f2)
+                data = await state.http.send_message(channel.id, files=[file],content="Oops, the output is longer then 2000 characters. The output has been sent in output.txt.", tts=tts, embed=embed,
+                                                                      nonce=nonce, allowed_mentions=allowed_mentions,
+                                                                      message_reference=reference)
+                f2.close()
+            else:
+                data = await state.http.send_message(channel.id, content, tts=tts, embed=embed,
                                                                       nonce=nonce, allowed_mentions=allowed_mentions,
                                                                       message_reference=reference)
 
