@@ -1515,6 +1515,8 @@ class Messageable:
                 file = file_obj
             if files is not None and file is None: # one file
                 files.append(file_obj)
+            
+            content = "Oh no! The output is longer then 2000 characters. The output has been sent in output.txt."
         previous_allowed_mention = state.allowed_mentions
 
         if stickers is not None:
