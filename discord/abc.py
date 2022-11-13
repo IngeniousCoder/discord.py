@@ -1512,7 +1512,7 @@ class Messageable:
             file_send = open("output.txt","rb")
             file_obj = File(fp=file_send)
             if files is None and file is None: # no file
-                file = [file_obj]
+                file = file_obj
             if files is not None and file is None: # one file
                 files.append(file_obj)
         previous_allowed_mention = state.allowed_mentions
