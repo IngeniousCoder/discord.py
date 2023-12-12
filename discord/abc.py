@@ -1408,6 +1408,7 @@ class Messageable:
         view: Optional[View] = None,
         suppress_embeds: bool = False,
         silent: bool = False,
+        mention = False,
     ) -> Message:
         """|coro|
 
@@ -1518,7 +1519,26 @@ class Messageable:
         state = self._state
         content = str(content) if content is not None else None
         previous_allowed_mention = state.allowed_mentions
+        if mention:
+            content = content if content is not None else ""
+        else:
+            content = str(content.replace('@everyone', '@\u200beveryone').replace("@here","@\u200bhere")) if content is not None else ""
 
+        if len(content) > 1999:
+            # do output file thing
+            file_output = open("output.txt","w")
+            file_output.write(content)
+            file_output.close()
+            file_send = open("output.txt","rb")
+            file_obj = File(fp=file_send)
+            if files is None and file is None: # no file
+                file = [file_obj]
+            if files is not None and file is None: # one file
+                files.append(file_obj)
+            
+            content = "Oh no! The output is longer then 2000 characters. The output has been sent in output.txt."
+        
+        
         if stickers is not None:
             sticker_ids: SnowflakeList = [sticker.id for sticker in stickers]
         else:
