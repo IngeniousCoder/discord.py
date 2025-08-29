@@ -22,49 +22,28 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 """
 
-from typing import Optional, TypedDict
-from .snowflake import SnowflakeList
-from .user import User, AvatarDecorationData
+from typing import TypedDict, Optional, Union
 from typing_extensions import NotRequired
 
-
-class Nickname(TypedDict):
-    nick: str
-
-
-class PartialMember(TypedDict):
-    roles: SnowflakeList
-    joined_at: Optional[str]  # null if guest
-    deaf: bool
-    mute: bool
-    flags: int
+from .snowflake import Snowflake
+from .user import User
 
 
-class Member(PartialMember, total=False):
-    avatar: str
-    user: User
-    nick: str
-    premium_since: Optional[str]
-    pending: bool
-    permissions: str
-    communication_disabled_until: str
-    banner: NotRequired[Optional[str]]
-    avatar_decoration_data: NotRequired[AvatarDecorationData]
+class BaseSoundboardSound(TypedDict):
+    sound_id: Union[Snowflake, str]  # basic string number when it's a default sound
+    volume: float
 
 
-class _OptionalMemberWithUser(PartialMember, total=False):
-    avatar: str
-    nick: str
-    premium_since: Optional[str]
-    pending: bool
-    permissions: str
-    communication_disabled_until: str
-    avatar_decoration_data: NotRequired[AvatarDecorationData]
+class SoundboardSound(BaseSoundboardSound):
+    name: str
+    emoji_name: Optional[str]
+    emoji_id: Optional[Snowflake]
+    user_id: NotRequired[Snowflake]
+    available: bool
+    guild_id: NotRequired[Snowflake]
+    user: NotRequired[User]
 
 
-class MemberWithUser(_OptionalMemberWithUser):
-    user: User
-
-
-class UserWithMember(User, total=False):
-    member: _OptionalMemberWithUser
+class SoundboardDefaultSound(BaseSoundboardSound):
+    name: str
+    emoji_name: str

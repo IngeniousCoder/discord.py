@@ -25,57 +25,19 @@ DEALINGS IN THE SOFTWARE.
 from __future__ import annotations
 
 from typing import List, Literal, Optional, TypedDict
-from typing_extensions import NotRequired
 
 from .snowflake import Snowflake
-from .message import Message
 
-ThreadType = Literal[10, 11, 12]
-ThreadArchiveDuration = Literal[60, 1440, 4320, 10080]
+SubscriptionStatus = Literal[0, 1, 2]
 
 
-class ThreadMember(TypedDict):
+class Subscription(TypedDict):
     id: Snowflake
     user_id: Snowflake
-    join_timestamp: str
-    flags: int
-
-
-class ThreadMetadata(TypedDict):
-    archived: bool
-    auto_archive_duration: ThreadArchiveDuration
-    archive_timestamp: str
-    archiver_id: NotRequired[Snowflake]
-    locked: NotRequired[bool]
-    invitable: NotRequired[bool]
-    create_timestamp: NotRequired[str]
-
-
-class Thread(TypedDict):
-    id: Snowflake
-    guild_id: Snowflake
-    parent_id: Snowflake
-    owner_id: Snowflake
-    name: str
-    type: ThreadType
-    member_count: int
-    message_count: int
-    total_message_sent: int
-    rate_limit_per_user: int
-    thread_metadata: ThreadMetadata
-    member: NotRequired[ThreadMember]
-    last_message_id: NotRequired[Optional[Snowflake]]
-    last_pin_timestamp: NotRequired[Optional[Snowflake]]
-    newly_created: NotRequired[bool]
-    flags: NotRequired[int]
-    applied_tags: NotRequired[List[Snowflake]]
-
-
-class ThreadPaginationPayload(TypedDict):
-    threads: List[Thread]
-    members: List[ThreadMember]
-    has_more: bool
-
-
-class ForumThread(Thread):
-    message: Message
+    sku_ids: List[Snowflake]
+    entitlement_ids: List[Snowflake]
+    current_period_start: str
+    current_period_end: str
+    status: SubscriptionStatus
+    canceled_at: Optional[str]
+    renewal_sku_ids: Optional[List[Snowflake]]

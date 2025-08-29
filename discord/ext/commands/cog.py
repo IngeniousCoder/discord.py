@@ -21,6 +21,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 """
+
 from __future__ import annotations
 
 import inspect
@@ -44,18 +45,30 @@ from typing import (
     Tuple,
     TypeVar,
     Union,
+    TypedDict,
 )
 
 from ._types import _BaseCommand, BotT
 
 if TYPE_CHECKING:
-    from typing_extensions import Self
+    from typing_extensions import Self, Unpack
     from discord.abc import Snowflake
     from discord._types import ClientT
 
     from .bot import BotBase
     from .context import Context
-    from .core import Command
+    from .core import Command, _CommandDecoratorKwargs
+
+    class _CogKwargs(TypedDict, total=False):
+        name: str
+        group_name: Union[str, app_commands.locale_str]
+        description: str
+        group_description: Union[str, app_commands.locale_str]
+        group_nsfw: bool
+        group_auto_locale_strings: bool
+        group_extras: Dict[Any, Any]
+        command_attrs: _CommandDecoratorKwargs
+
 
 __all__ = (
     'CogMeta',
@@ -169,7 +182,7 @@ class CogMeta(type):
     __cog_app_commands__: List[Union[app_commands.Group, app_commands.Command[Any, ..., Any]]]
     __cog_listeners__: List[Tuple[str, str]]
 
-    def __new__(cls, *args: Any, **kwargs: Any) -> Self:
+    def __new__(cls, *args: Any, **kwargs: Unpack[_CogKwargs]) -> CogMeta:
         name, bases, attrs = args
         if any(issubclass(base, app_commands.Group) for base in bases):
             raise TypeError(
@@ -318,6 +331,8 @@ class Cog(metaclass=CogMeta):
                 parent=None,
                 guild_ids=getattr(cls, '__discord_app_commands_default_guilds__', None),
                 guild_only=getattr(cls, '__discord_app_commands_guild_only__', False),
+                allowed_contexts=getattr(cls, '__discord_app_commands_contexts__', None),
+                allowed_installs=getattr(cls, '__discord_app_commands_installation_types__', None),
                 default_permissions=getattr(cls, '__discord_app_commands_default_permissions__', None),
                 extras=cls.__cog_group_extras__,
             )
@@ -366,7 +381,7 @@ class Cog(metaclass=CogMeta):
                                 child.wrapped = lookup[child.qualified_name]  # type: ignore
 
                     if self.__cog_app_commands_group__:
-                        children.append(app_command)  # type: ignore # Somehow it thinks it can be None here
+                        children.append(app_command)
 
         if Cog._get_overridden_method(self.cog_app_command_error) is not None:
             error_handler = self.cog_app_command_error
